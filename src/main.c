@@ -4,7 +4,6 @@
 
 enum {RET_OK, RET_DLLFAILS, RET_FAILSFCN, RET_FAILSVAR};
 
-
 int main(int argc, char **argv){
 
 
