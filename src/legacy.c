@@ -1,147 +1,313 @@
-
 #include <stdio.h>
 #include <legacy.h>
 #include <dlfcn.h>
+#include <config.h>
+#include <stdlib.h>
+#include <string.h>
 
-int *key, *key_rd, *keyel, *keysub, *keyls, *key_org, *key_fx, 
-    *key_grid1, *key_rd1, *kn, *km, *kr, *nratn, *ndp;
+// Macroses for accesing variables in shared library
+#define GET_VAR(hdlr, type, name) ({ \
+                                    type *tmp; \
+                                    tmp = (type *)dlsym(hdlr->libsp, name);\
+                                    if(tmp==NULL){\
+                                        fprintf(stderr, "error on line %d problem with loading dll variable %s.", __LINE__, name);\
+                                        return IL_FAIL_VAR;\
+                                    }\
+                                    tmp;\
+                                })
 
-float *wl, *rn, *rk, *pomin, *pomax, *xext, *xabs, *xsca, *albedo, 
-      *xblr, *xldr;
-
-float *r;//[KRpar];
-float *grid,//[KNpar], 
-       *sd;//[KNpar];
-float *rd;//[KRpar];
+// Macro for int and float types
+#define GET_INT_VAR(hdlr, name) GET_VAR(hdlr, int, name)
+#define GET_FLT_VAR(hdlr, name) GET_VAR(hdlr, float, name)
 
 
-float *f11,//[KMpar], 
-       *f12,//[KMpar], //
-       *f22,//[KMpar], 
-       *f33,//[KMpar], //
-       *f34,//[KMpar], 
-       *f44;//[KMpar];
-float *angle;//[KMpar];
-int *key_sd, *id, *nmd, *nsd;
+// Handle of shared library structure
+static legacy_t *hdlr=NULL;
 
-float *cm,//[KMD], 
-       *sm,//[KMD], 
-       *rmm;//[KMD];
-float *rrr,//[KNpar], 
-       *ar,//[KNpar], 
-       *xgrid;//[KNpar];
-float *ac;
+// get_handler - returns handler to static struct
+legacy_t *get_handler(){
+    if(hdlr==NULL){
+        int ret;
+        if((ret = initialize_shared_library())!=IL_OK){
+            perror("Error loading dll library");
+            return NULL;
+        }
+    }
+    return hdlr;
+}
 
-// Handle of shared library
-void *libsp;
+//
+int initialize_shared_library(){
+    hdlr = (legacy_t*)malloc(sizeof(legacy_t));
+    if(hdlr==NULL){
+        perror("Error alocating memory");
+        return IL_FAIL_LOAD;
+    }
 
-int initialize_shared_library(const char *fname){
-    libsp = dlopen(fname, RTLD_NOW);
+    hdlr->libsp = dlopen(LIBRARY_PATH, RTLD_NOW);
 
-    if(libsp==NULL){
+    if(hdlr->libsp==NULL){
         perror("Error loading dll. ");
         return IL_FAIL_LOAD;
     }
 
-    dls_read_config_ = (void (*)(const char *, int*))dlsym(libsp, "dls_read_config_");
+    dls_read_config_ = (void (*)(const char *, int*))dlsym(hdlr->libsp, "dls_read_config_");
     if (dls_read_config_==NULL){
         perror("Error loading dll. ");
         return IL_FAIL_FUNCT;
     }
 
-    alloc_dls_array_ = (void (*)(int*, int*, int*))dlsym(libsp, "alloc_dls_array_");
+    alloc_dls_array_ = (void (*)(int*, int*, int*))dlsym(hdlr->libsp, "alloc_dls_array_");
     if (alloc_dls_array_==NULL){
         perror("Error loading dll. ");
         return IL_FAIL_FUNCT;
     }
 
-    optchar_ = (void (*)(int*))dlsym(libsp, "optchar_");
+    optchar_ = (void (*)(int*))dlsym(hdlr->libsp, "optchar_");
     if (optchar_==NULL){
         perror("Error loading dll. ");
         return IL_FAIL_FUNCT;
     }
 
-    sizedisdn_ = (void (*)(int *, int *, int *, int *, float* , float* , float* , float* , float* , float* , float* , float *, int *, int* ))dlsym(libsp, "sizedisdn_");
+    sizedisdn_ = (void (*)(int *, int *, int *, int *, float* , float* , float* , float* , float* , float* , float* , float *, int *, int* ))dlsym(hdlr->libsp, "sizedisdn_");
     if (sizedisdn_==NULL){
         perror("Error loading dll. ");
         return IL_FAIL_FUNCT;
     }
-
  
-    set_distname_o = (void (*)(char*))dlsym(libsp, "set_distname_o");
+    set_distname_o = (void (*)(char*))dlsym(hdlr->libsp, "set_distname_o");
     if (set_distname_o==NULL){
         perror("Error loading dll. ");
         return IL_FAIL_FUNCT;
     }
 
-    set_distname_f = (void (*)(char*))dlsym(libsp, "set_distname_f");
+    set_distname_f = (void (*)(char*))dlsym(hdlr->libsp, "set_distname_f");
     if (set_distname_f==NULL){
         perror("Error loading dll. ");
         return IL_FAIL_FUNCT;
     }
 
-    set_distname_n = (void (*)(char*))dlsym(libsp, "set_distname_n");
+    set_distname_n = (void (*)(char*))dlsym(hdlr->libsp, "set_distname_n");
     if (set_distname_n==NULL){
         perror("Error loading dll. ");
         return IL_FAIL_FUNCT;
     }
 
-    set_comm_name = (void (*)(int *, char *))dlsym(libsp, "set_comm_name");
+    set_comm_name = (void (*)(int *, char *))dlsym(hdlr->libsp, "set_comm_name");
     if (set_distname_o==NULL){
         perror("Error loading dll. ");
         return IL_FAIL_FUNCT;
     }
 
-
-    wl = get_float_var(libsp, "wl");
-    if (wl==0) return IL_FAIL_VAR;
-    
-    r = get_float_var(libsp, "r");
-    if (r==0) return IL_FAIL_VAR;
-    
-    rrr = get_float_var(libsp, "rrr");
-    if (rrr==0) return IL_FAIL_VAR;
-
-    grid = get_float_var(libsp, "grid");
-    if (grid==0) return IL_FAIL_VAR;
-
-    kn = get_int_var(libsp, "kn");
-    if (kn==0) return IL_FAIL_VAR;
-
-    sd = get_float_var(libsp, "sd");
-    if (sd==0) return IL_FAIL_VAR;
-
+    hdlr->key = GET_INT_VAR(hdlr, "key");
+    hdlr->key_rd = GET_INT_VAR(hdlr, "key_rd");
+    hdlr->keyel = GET_INT_VAR(hdlr, "keyel");
+    hdlr->keysub = GET_INT_VAR(hdlr, "keysub");
+    hdlr->keyls = GET_INT_VAR(hdlr, "keyls");
+    hdlr->key_org = GET_INT_VAR(hdlr, "key_org");
+    hdlr->key_fx = GET_INT_VAR(hdlr, "key_fx");
+    hdlr->key_grid1 = GET_INT_VAR(hdlr, "key_grid1");
+    hdlr->key_rd1 = GET_INT_VAR(hdlr, "key_rd1");
+    hdlr->km = GET_INT_VAR(hdlr, "km");
+    hdlr->kr = GET_INT_VAR(hdlr, "kr");
+    hdlr->nratn = GET_INT_VAR(hdlr, "nratn");
+    hdlr->ndp = GET_INT_VAR(hdlr, "ndp");
+    hdlr->xext = GET_FLT_VAR(hdlr, "xext");
+    hdlr->xabs = GET_FLT_VAR(hdlr, "xabs");
+    hdlr->xsca = GET_FLT_VAR(hdlr, "xsca");
+    hdlr->albedo = GET_FLT_VAR(hdlr, "albedo");
+    hdlr->xblr = GET_FLT_VAR(hdlr, "xblr");
+    hdlr->xldr = GET_FLT_VAR(hdlr, "xldr");
+    hdlr->rn = GET_FLT_VAR(hdlr, "rn");
+    hdlr->rk = GET_FLT_VAR(hdlr, "rk");
+    hdlr->wl = GET_FLT_VAR(hdlr, "wl");
+    hdlr->r = GET_FLT_VAR(hdlr, "r");
+    hdlr->rrr = GET_FLT_VAR(hdlr, "rrr");
+    hdlr->grid = GET_FLT_VAR(hdlr, "grid");
+    hdlr->kn = GET_INT_VAR(hdlr, "kn");
+    hdlr->sd = GET_FLT_VAR(hdlr, "sd");
+    hdlr->rd = GET_FLT_VAR(hdlr, "rd");
+    hdlr->f11 = GET_FLT_VAR(hdlr, "f11");
+    hdlr->f12 = GET_FLT_VAR(hdlr, "f12");
+    hdlr->f22 = GET_FLT_VAR(hdlr, "f22");
+    hdlr->f33 = GET_FLT_VAR(hdlr, "f33");
+    hdlr->f34 = GET_FLT_VAR(hdlr, "f34");
+    hdlr->f44 = GET_FLT_VAR(hdlr, "f44");
+    hdlr->angle = GET_FLT_VAR(hdlr, "angle");
+    hdlr->key_sd = GET_INT_VAR(hdlr, "key_sd");
+    hdlr->id = GET_INT_VAR(hdlr, "id");
+    hdlr->nmd = GET_INT_VAR(hdlr, "nmd");
+    hdlr->nsd = GET_INT_VAR(hdlr, "nsd");
+    hdlr->cm = GET_FLT_VAR(hdlr, "cm");
+    hdlr->sm = GET_FLT_VAR(hdlr, "sm");
+    hdlr->rmm = GET_FLT_VAR(hdlr, "rmm");
+    hdlr->rrr = GET_FLT_VAR(hdlr, "rrr");
+    hdlr->ar = GET_FLT_VAR(hdlr, "ar");
+    hdlr->xgrid = GET_FLT_VAR(hdlr, "xgrid");
+    hdlr->ac = GET_FLT_VAR(hdlr, "ac");
+    hdlr->is_allocated = false;
     return IL_OK;
 }
 
+// deinitialize_shared_library - закрывает ьиьлиотеку и освобождает ресурсы
 int deinitialize_shared_library(){
-    int eret = dlclose(libsp);
+    if(hdlr==0 || hdlr->libsp==0){
+        perror("dll is not initialized");
+        return IL_FAIL_UNLOAD;
+    }
+
+    int eret = dlclose(hdlr->libsp);
     if(eret!=0){
         perror(dlerror());
         return IL_FAIL_UNLOAD;
     }
+    hdlr->libsp = NULL;
+    free(hdlr);
+    hdlr=NULL;
     return IL_OK;
 }
 
-// get_float_var - возвращает указатель на переменную динамической библиотеки
-// libsp - указатель на загруженную динамическую библиотеку
-// varname - имя символа в библиотеке к которому мы хотим получить доступ
-float * get_float_var(void * libsp, const char *varname){
-    float * tmp;
-    tmp = (float *)dlsym(libsp, varname);
-    if (tmp==0){
-        perror("Error loading dll. ");
-        return 0;
+// print_config вывод на экран некоторых настроек расчтета.
+void print_config(legacy_t *hdlr){
+    if(hdlr->libsp==NULL){
+        perror("Library didn't loaded.");
+        return;
     }
-    return tmp;
+
+    //print wavelength
+    printf("Wavelen: %7.2f um.\n", *hdlr->wl);
+    // Print sizedistr
+    printf("[\n");
+    printf("%s |%s","R, um,","dVdlnr\n");
+    for(int i=0; i<*hdlr->kn; i++){
+        printf("%7.2f %7.4f\n", hdlr->grid[i], hdlr->sd[i]);
+    }
+    printf("\b\b]\n");
+
+    printf("[\n");
+    printf("R, um, |rd\n");
+    for(int i=0; i<*hdlr->kr; i++){
+        printf("%7.2f %7.4f\n", hdlr->r[i], hdlr->rd[i]);
+    }
+    printf("\b\b]\n");
+}   
+
+// read_config_file читает файл с настройками
+void read_config_file(legacy_t *hdlr, const char* fname){
+    int len = strlen(fname);
+    dls_read_config_(fname, &len);
 }
 
-int* get_int_var(void* libsp, const char* varname){
-    int * tmp;
-    tmp = (int *)dlsym(libsp, varname);
-    if (tmp==0){
-        perror("Error loading dll. ");
-        return 0;
+void allocate_arrays(legacy_t *hdlr){
+    if(!hdlr->is_allocated){
+        int32_t val = 1;
+        alloc_dls_array_(hdlr->key, hdlr->keyel, &val);
+        hdlr->is_allocated=true;
     }
-    return tmp;
+}
+
+void deallocate_arrays(legacy_t *hdlr){
+    if (hdlr->is_allocated){
+        int32_t val = 2;
+        alloc_dls_array_(hdlr->key, hdlr->keyel, &val);
+        hdlr->is_allocated=false;
+    }
+}
+
+uint8_t is_loaded(legacy_t *hldr){
+    return hldr->libsp!=NULL;
+}
+
+uint8_t is_allocated(legacy_t *hldr){
+    return hldr->is_allocated;
+}
+
+const float * get_f11(legacy_t *hldr){
+    if((hldr->libsp!=NULL)&&(hldr->is_allocated==1)){
+        return hldr->f11;
+    }
+    return NULL;
+}
+
+const float * get_f12(legacy_t *hldr){
+    if((hldr->libsp!=NULL)&&(hldr->is_allocated==1)){
+        return hldr->f12;
+    }
+    return NULL;
+}
+
+const float * get_f22(legacy_t *hldr){
+    if((hldr->libsp!=NULL)&&(hldr->is_allocated==1)){
+        return hldr->f22;
+    }
+    return NULL;
+}
+
+const float * get_f33(legacy_t *hldr){
+    if((hldr->libsp!=NULL)&&(hldr->is_allocated==1)){
+        return hldr->f33;
+    }
+    return NULL;
+}
+
+const float * get_f34(legacy_t *hldr){
+    if((hldr->libsp!=NULL)&&(hldr->is_allocated==1)){
+        return hldr->f34;
+    }
+    return NULL;
+}
+
+const float * get_f44(legacy_t *hldr){
+    if((hldr->libsp!=NULL)&&(hldr->is_allocated==1)){
+        return hldr->f44;
+    }
+    return NULL;
+}
+
+const float* get_angle(legacy_t *hldr){
+    if((hldr->libsp!=NULL)&&(hldr->is_allocated==1)){
+        return hldr->angle;
+    }
+    return NULL;
+}
+
+const float * get_rrr(legacy_t *hdlr){
+    if((hdlr->libsp!=NULL)&&(hdlr->is_allocated==1)){
+        return hdlr->rrr;
+    }
+    return NULL;
+}
+
+void calculate(legacy_t *hdlr){
+    if((hdlr->libsp!=NULL)&&(hdlr->is_allocated==1)){
+        optchar_(hdlr->ndp);
+    }
+}
+
+const float * get_ar(legacy_t *hldr){
+    if((hdlr->libsp!=NULL)&&(hdlr->is_allocated==1)){
+        return hdlr->ar;
+    }
+    return NULL;
+}
+
+const float * get_xgrid(legacy_t *hldr){
+    if((hdlr->libsp!=NULL)&&(hdlr->is_allocated==1)){
+        return hdlr->xgrid;
+    }
+    return NULL;
+}
+
+const float * get_grid(legacy_t *hldr){
+    if((hdlr->libsp!=NULL)&&(hdlr->is_allocated==1)){
+        return hdlr->grid;
+    }
+    return NULL;
+}
+
+const float * get_sd(legacy_t *hldr){
+    if((hdlr->libsp!=NULL)&&(hdlr->is_allocated==1)){
+        return hdlr->sd;
+    }
+    return NULL;
 }
